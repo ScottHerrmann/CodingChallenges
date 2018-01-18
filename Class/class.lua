@@ -7,18 +7,9 @@
 --Delete method(s)
 --Make classes their own object constructors
 Class = {}
-Class.__classes = {}
 
 local minPrefix = 3
 local maxPrefix = 8
-
-local classExists = function(name)
-  return(type(Class.__classes[name]) == "table")
-end
-
-local methodExists = function(name, fxn)
-  return(type(Class.__classes[name][fxn]) == "function")
-end
 
 local generatePrivatePrefix = function()
   local ranLen = math.floor(math.random(minPrefix, maxPrefix))
@@ -40,71 +31,74 @@ end
 
 --Name of the class, ARRAY of member NAMES
 Class.newClass = function(name, args, defaults, bPrivate)
-  if not classExists(name) then
-    local t = {}
-    setmetatable(t, {__index = Class})
-    t.private = bPrivate
-    if bPrivate == true then
-      local prefix = generatePrivatePrefix()
-      for k, v in pairs(args) do
-        local tmp = prefix .. v
-        args[k] = tmp
-      end
-      t.__prefix = prefix
+  local t = {}
+  setmetatable(t, {__index = Class,
+      __tostring = function(t) return name end})
+  t.__private = bPrivate
+  t.__name = name
+  if bPrivate == true then
+    local prefix = generatePrivatePrefix()
+    for k, v in pairs(args) do
+      args[k] = prefix .. v
     end
-    t.args = args
-    if type(defaults) == "table" then
-      t.defaultArgs = defaults
-    end
-    Class.__classes[name] = t
-  else
-    assert(false, "Class " .. name .. " is already defined.")
+    t.__prefix = prefix
   end
+  t.args = args
+  if type(defaults) == "table" then
+    t.defaultArgs = defaults
+  end
+  return t
 end
+
+Class.isA = function(parent, childName, args, defaults, bPrivate)
+  local t = {}
+  setmetatable(t, {__index = parent,
+      __tostring = function(t) return t.__name end})
+  t.__private = bPrivate
+  t.__name = childName
+  local argOffset = #parent.args
+  local newArgList = {}
+  for k, v in ipairs(parent.args) do
+    newArgList[k] = v
+  end
+  if args then
+    for k, v in ipairs(args) do
+      newArgList[k+argOffset] = v
+    end
+  end
+  t.args = newArgList
+  if type(defaults) == "table" then
+    t.defaultArgs = defaults
+  end
+  return t
+end
+
 
 --Name of the class, ARRAY of member VALUES
-Class.new = function(name, args)
-  if classExists(name) then
-    local argCount = #Class.__classes[name].args 
-    local inArgCount = #args
-    local memberNames = Class.__classes[name].args
-    local defaults = Class.__classes[name].defaultArgs
-    local t = {}
-    setmetatable(t, { 
-        __index = Class.__classes[name],
-        __tostring = function(t) return name end,
-        __newindex = Class.__classes[name]})
-    for i = 1, argCount do
-      if defaults ~= nil and (args[i] == nil or args[i] == "") then
-        if defaults[i] then
-          t[memberNames[i]] = defaults[i]
-        else
-          assert(false, "Attempted to index default value for " .. memberNames[i] .. ". No default set.")
-        end
-      elseif defaults == nil and (args[i] == nil or args[i] == "") then
-        assert(false, "Attempted to index default value for " .. memberNames[i] .. ". No default set.")
+Class.new = function(self, args)
+  local argCount = #self.args 
+  local inArgCount = #args
+  local memberNames = self.args
+  local defaults = self.defaultArgs
+  local t = {}
+  setmetatable(t, { 
+      __index = self,
+      __tostring = function(t) return t.__name end})
+  for i = 1, argCount do
+    if defaults ~= nil and (args[i] == nil or args[i] == "") then
+      if defaults[i] then
+        t[memberNames[i]] = defaults[i]
       else
-        t[memberNames[i]] = args[i]
+        assert(false, "Attempted to index default value for " .. memberNames[i] .. ". No default set.")
       end
-    end
-    if type(t.init) == "function" then
-      t.init()
-    end
-    return t
-  else
-    assert(false, "Class " .. name .. " is not defined.")
-  end
-end
-
---Name of the class, name of the function, the function
-Class.newMethod = function(className, methodName, method)
-  if classExists(className) then
-    if not methodExists(className, methodName) then
-      Class.__classes[className][methodName] = method
+    elseif defaults == nil and (args[i] == nil or args[i] == "") then
+      assert(false, "Attempted to index default value for " .. memberNames[i] .. ". No default set.")
     else
-      assert(false, "Method " .. methodName .. " for class " .. className .. " already defined.")
+      t[memberNames[i]] = args[i]
     end
-  else
-    assert(false, "Class " .. name .. " not defined.")
   end
+  if type(t.init) == "function" then
+    t.init()
+  end
+  return t
 end
